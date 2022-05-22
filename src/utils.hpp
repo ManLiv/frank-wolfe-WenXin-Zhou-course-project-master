@@ -225,35 +225,39 @@ double measurement(const graph_type& g, const mat_type& D,
     std::vector<vertex_type> _p_star;
     double sum_d_times_miu = 0.0;
 
-    for (r = 0; r < centroids.size(); ++r) {
-        if (destination_count[r] == 0.){
-            continue;
-        }
-
-        _p_star = std::vector<vertex_type>(boost::num_vertices(g));
-
-        compute_min_tree(g, centroids[r], _p_star, D, destination_count[r], all_centroid, edge_matrix);
-
-        it1 = D.begin1();
-        std::advance(it1, r);
-
-        for (it2 = it1.begin() ; it2 != it1.end() ; ++it2) {
-            if (*it2 == 0.){
+#pragma omp parallel shared(g, D, all_centroid, num_p, sum_d_times_miu, paths_matrix) private(_p_star, r, it1, it2, origin, destination)
+    {
+#pragma omp for schedule(dynamic) reduction(+:sum_d_times_miu)
+        for (r = 0; r < centroids.size(); ++r) {
+            if (destination_count[r] == 0.){
                 continue;
             }
 
-            origin = it2.index1();
-            destination = it2.index2();
+            _p_star = std::vector<vertex_type>(boost::num_vertices(g));
 
-            path_type p(origin, destination);
-            build_path(p, _p_star, edge_matrix);
-            p.sort_edges();
+            compute_min_tree(g, centroids[r], _p_star, D, destination_count[r], all_centroid, edge_matrix);
 
-            double demand = *it2;
-            p.path_flow = demand;
+            it1 = D.begin1();
+            std::advance(it1, r);
 
-            double minimal_path_cost = p.compute_cost(g);
-            sum_d_times_miu += minimal_path_cost * demand;
+            for (it2 = it1.begin() ; it2 != it1.end() ; ++it2) {
+                if (*it2 == 0.){
+                    continue;
+                }
+
+                origin = it2.index1();
+                destination = it2.index2();
+
+                path_type p(origin, destination);
+                build_path(p, _p_star, edge_matrix);
+                p.sort_edges();
+
+                double demand = *it2;
+                p.path_flow = demand;
+
+                double minimal_path_cost = p.compute_cost(g);
+                sum_d_times_miu += minimal_path_cost * demand;
+            }
         }
     }
 
